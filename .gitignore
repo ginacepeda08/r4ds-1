@@ -1,0 +1,5 @@
+analysis_files
+analysis_cache
+billboard: artist, track data entered, and the first four week columns
+/.quarto/
+**/*.quarto_ipynb

@@ -1,2 +1,114 @@
+---
 title: "Billboard Hot 100"
 author: "Gina Cepeda"
+execute:
+  echo: false
+---
+
+```{r}
+#| message: false
+library(tidyverse)
+billboard <- read_csv("data/billboard.csv")
+```
+
+```{r}
+billboard_long <- billboard |>
+  mutate(song = row_number()) |>
+  pivot_longer(
+    cols = starts_with("wk"),
+    names_to = "week",
+    names_prefix = "wk",
+    values_to = "rank"
+  ) |>
+  mutate(week = as.integer(week))
+
+song_summary <- billboard_long |>
+  filter(!is.na(rank)) |>
+  group_by(song, artist, track) |>
+  summarise(
+    first_rank = rank[which.min(week)],
+    best_rank = min(rank),
+    first_week_at_best_rank = min(week[rank == min(rank)]),
+    total_weeks = n(),
+    .groups = "drop"
+  ) |>
+  filter(best_rank <= 10)
+
+song_summary |>
+  select(artist, track, first_rank, best_rank, first_week_at_best_rank, total_weeks) |>
+  knitr::kable(caption = "Summary of songs that reached the top 10")
+
+fastest_to_number_one <- song_summary |>
+  filter(best_rank == 1) |>
+  arrange(first_week_at_best_rank, artist, track) |>
+  slice_head(n = 1) |>
+  mutate(notable = "Fastest to number one")
+
+slowest_to_number_one <- song_summary |>
+  filter(best_rank == 1) |>
+  arrange(desc(first_week_at_best_rank), artist, track) |>
+  slice_head(n = 1) |>
+  mutate(notable = "Slowest to number one")
+
+longest_top_10_run <- song_summary |>
+  arrange(desc(total_weeks), artist, track) |>
+  slice_head(n = 1) |>
+  mutate(notable = "Longest chart run")
+
+bind_rows(fastest_to_number_one, slowest_to_number_one, longest_top_10_run) |>
+  select(notable, artist, track, first_week_at_best_rank, total_weeks) |>
+  knitr::kable(caption = "Notable top-10 songs")
+
+notable_songs <- bind_rows(
+  fastest_to_number_one,
+  slowest_to_number_one,
+  longest_top_10_run
+) |>
+  mutate(notable_song = paste(artist, track, sep = " - ")) |>
+  select(song, notable_song)
+
+top10_long <- billboard_long |>
+  semi_join(song_summary, by = "song") |>
+  left_join(notable_songs, by = "song")
+
+last_week <- billboard_long |>
+  filter(!is.na(rank)) |>
+  group_by(song) |>
+  summarise(last_week = max(week), last_rank = rank[which.max(week)])
+
+last_week |>
+  filter(last_week == 20) |>
+  summarise(
+    songs = n(),
+    ranked_below_50 = sum(last_rank > 50)
+  ) |>
+  knitr::kable()
+
+ggplot(top10_long, aes(x = week, y = rank, group = song)) +
+  geom_line(alpha = 0.25, color = "gray60", na.rm = TRUE) +
+  geom_line(
+    data = filter(top10_long, !is.na(notable_song)),
+    aes(color = notable_song),
+    linewidth = 0.8,
+    na.rm = TRUE
+  ) +
+  scale_y_reverse(limits = c(100, 1), breaks = c(1, 25, 50, 75, 100)) +
+  scale_color_brewer(palette = "Dark2", name = "Notable songs") +
+  labs(
+    title = "Top-10 Songs: Billboard Rankings Over Time",
+    x = "Week on chart",
+    y = "Billboard rank"
+  )
+```
+
+```{r}
+#| label: Last
+weeks <- c("wk1", "wk4", "wk10", "wk20", "wk40", "wk76")
+
+tibble(
+  week = weeks,
+  present = map_int(weeks, \(week) sum(!is.na(billboard[[week]]))),
+  missing = map_int(weeks, \(week) sum(is.na(billboard[[week]])))
+) |>
+  knitr::kable()
+```
